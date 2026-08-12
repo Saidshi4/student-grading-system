@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      max-lifetime: 1800000
+      idle-timeout: 600000
+
+  jpa:
+    show-sql: ${SPRING_JPA_SHOW_SQL:false}
+    generate-ddl: true
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    properties:
+      hibernate:
+        dialect: ${SPRING_JPA_PROPERTIES_HIBERNATE_DIALECT:org.hibernate.dialect.PostgreSQLDialect}
+        format_sql: true
+        generate_statistics: false
+        cache:
+          use_second_level_cache: false
+          use_query_cache: false
+        boot:
+          allow_jdbc_metadata_access: true

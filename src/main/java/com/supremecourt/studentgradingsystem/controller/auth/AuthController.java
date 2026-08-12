@@ -1,0 +1,70 @@
+package com.supremecourt.studentgradingsystem.controller.auth;
+
+import com.supremecourt.studentgradingsystem.model.request.OTPRequestDto;
+import com.supremecourt.studentgradingsystem.model.request.ResendOTPRequestDto;
+import com.supremecourt.studentgradingsystem.model.request.ResetPasswordRequestDto;
+import com.supremecourt.studentgradingsystem.model.request.UserRegistrationDto;
+import com.supremecourt.studentgradingsystem.model.request.auth.AuthRequestDto;
+import com.supremecourt.studentgradingsystem.model.request.auth.AuthenticationDto;
+import com.supremecourt.studentgradingsystem.model.response.ResponseDto;
+import com.supremecourt.studentgradingsystem.service.auth.AuthService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequiredArgsConstructor
+@RequestMapping("/v1/auth")
+public class AuthController {
+
+    private final AuthService authService;
+
+    @PostMapping("/sign-up")
+    public String signUp(@RequestBody UserRegistrationDto userRegistrationDto) {
+        return authService.signUp(userRegistrationDto);
+    }
+
+    @PostMapping("/login")
+    public AuthenticationDto login(@RequestBody AuthRequestDto authRequestDto) {
+        return authService.authenticate(authRequestDto);
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseDto forgotPassword(@RequestParam("email") String email) {
+        return authService.forgotPassword(email);
+    }
+
+    @PostMapping("/reset-password")
+    public AuthenticationDto resetPassword(@RequestBody ResetPasswordRequestDto resetPasswordRequestDto) {
+        return authService.resetPassword(resetPasswordRequestDto);
+    }
+
+//    @PostMapping("/google")
+//    public AuthenticationDto googleLogin(@RequestBody GoogleLoginRequestDto requestDto) {
+//        return authService.loginWithGoogle(requestDto.getIdToken());
+//    }
+
+    @PostMapping("/verify/otp")
+    public AuthenticationDto verifyOTP(@RequestBody OTPRequestDto otpRequestDto) {
+        return authService.verifyOTP(otpRequestDto);
+    }
+
+    @PostMapping("/refresh/token")
+    public AuthenticationDto refreshToken(@CookieValue("refreshToken") String refreshToken) {
+        return authService.refreshToken(refreshToken);
+    }
+
+    @PostMapping("/logout")
+    public void logout(@RequestParam("accessToken") String accessToken) {
+        authService.logout(accessToken);
+    }
+
+    @PostMapping("/resend/otp")
+    public String resendOTP(@RequestBody ResendOTPRequestDto resendOTPRequestDto) {
+        return authService.resendOTP(resendOTPRequestDto);
+    }
+}

@@ -1,0 +1,4 @@
+firebase:
+  enabled: ${FIREBASE_ENABLED:false}
+  config-path: ${FIREBASE_CONFIG_PATH:}
+  bucket-name: ${FIREBASE_BUCKET_NAME:}

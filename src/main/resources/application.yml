@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: Student Grading System
+  jwt:
+    secret: ${JWT_SECRET_KEY}
+    expiration: ${JWT_EXPIRATION_MS}
+
+  mail:
+    host: ${SPRING_MAIL_HOST:smtp.gmail.com}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+  config:
+    import:
+      - classpath:application-db.yml
+      - classpath:application-redis.yml
+      - classpath:application-firebase.yml
+      - classpath:application-security-mail.yml
+      - classpath:application-multipart.yml
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            client-id: ${GOOGLE_CLIENT_ID}
+            client-secret: ${GOOGLE_CLIENT_SECRET}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+#  server-url: https://api.***.az:8080
+
+logging:
+  level:
+    root: INFO
+    org.springframework.web: info
+    com.supremecourt.studentgradingsystem: info
+
+server:
+  address: 0.0.0.0
+  port: 8080
+  forward-headers-strategy: framework

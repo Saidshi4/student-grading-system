@@ -1,0 +1,7 @@
+spring:
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:}
+      port: 6379
+      timeout: 5000
+      database: 0

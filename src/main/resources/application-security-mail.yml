@@ -1,0 +1,5 @@
+app:
+  mail:
+    from: ${SPRING_MAIL_USERNAME:}
+  frontend:
+    reset-password-url: ${APP_FRONTEND_RESET_PASSWORD_URL:http://localhost:3000/reset-password}
