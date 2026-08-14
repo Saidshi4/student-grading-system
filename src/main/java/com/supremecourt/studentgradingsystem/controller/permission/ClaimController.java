@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/v1/claims")
+@RequestMapping("/claims")
 @RequiredArgsConstructor
 public class ClaimController {
     private final ClaimService claimService;

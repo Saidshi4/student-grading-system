@@ -20,7 +20,7 @@ public class SecurityConfig {
     private final AuthenticationProvider authenticationProvider;
 
     public static final String[] AUTH_WHITELIST = {
-            "/v1/auth/**",
+            "/auth/**",
             "/v3/api-docs/**",
             "/swagger-ui/**",
             "/swagger-ui.html"

@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/v1/roles")
+@RequestMapping("/roles")
 @RequiredArgsConstructor
 public class RoleController {
     private final RoleService roleService;
@@ -31,7 +31,7 @@ public class RoleController {
         return ResponseEntity.status(HttpStatus.CREATED).body("Role Successfully Created");
     }
     @GetMapping()
-    @RequiresPermission("role_read_all")
+    @RequiresPermission("role_read")
     public List<RoleGetDto> getAllRoles(){
         return roleService.getAllRoles();
     }

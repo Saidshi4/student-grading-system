@@ -1,6 +1,7 @@
 package com.supremecourt.studentgradingsystem.dao.entity;
 
-import com.supremecourt.studentgradingsystem.enums.CourseStatusEnum;
+import com.supremecourt.studentgradingsystem.enums.CourseStatus;
+import com.supremecourt.studentgradingsystem.enums.EnrollmentType;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -26,7 +27,9 @@ public class CourseOfferingEntity extends BaseEntity {
     private Long id;
     private Integer capacity;
     @Enumerated(EnumType.STRING)
-    private CourseStatusEnum status;
+    private CourseStatus status;
+    @Enumerated(EnumType.STRING)
+    private EnrollmentType enrollmentType;
 
     @ManyToOne
     private TeacherEntity teacher;

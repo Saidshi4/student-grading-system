@@ -20,13 +20,8 @@ import com.supremecourt.studentgradingsystem.model.request.auth.AuthenticationDt
 import com.supremecourt.studentgradingsystem.model.response.ResponseDto;
 import com.supremecourt.studentgradingsystem.service.mail.EmailService;
 import com.supremecourt.studentgradingsystem.utils.OTPCodeGenerator;
-import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
-import com.google.api.client.googleapis.auth.oauth2.GoogleIdTokenVerifier;
-import com.google.api.client.http.javanet.NetHttpTransport;
-import com.google.api.client.json.gson.GsonFactory;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -39,7 +34,6 @@ import org.springframework.util.StringUtils;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
-import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -54,7 +48,6 @@ public class AuthService {
     private final UserMapper userMapper;
     private final JwtService jwtService;
     private final JwtBlacklistService jwtBlacklistService;
-//    private final AppleOAuth2Service appleOAuth2Service;
     private final EmailService emailService;
     private final RedisTemplate<String, Object> redisTemplate;
     private final ObjectMapper objectMapper;
@@ -65,34 +58,6 @@ public class AuthService {
     private static final long WRONG_OTP_BLOCK_MINUTES = 5L;
     private static final long RESEND_LIMIT_SECONDS = 60L;
     private static final long RESET_PASSWORD_OTP_TTL_SECONDS = 180L;
-
-    @Value("${GOOGLE_ANDROID_CLIENT_ID:}")
-    private String androidClientId;
-
-    @Value("${GOOGLE_IOS_CLIENT_ID:}")
-    private String iosClientId;
-
-    public String signUp(UserRegistrationDto dto) {
-        log.info("ActionLog.signUp.start");
-        String email = dto.getEmail();
-        if (emailExists(email)) throw new NotFoundException(ExceptionEnum.USER_ALREADY_EXISTS.name(),
-                String.format("User with email %s already exists", email));
-
-        String otp = OTPCodeGenerator.generateCode();
-        validatePasswordStrength(dto.getPassword());
-        dto.setPassword(passwordEncoder.encode(dto.getPassword()));
-        redisTemplate.opsForValue().set(email + ":OTP", otp, OTP_TTL_SECONDS, TimeUnit.SECONDS);
-        redisTemplate.opsForValue().set(email + ":Data", dto, SIGNUP_DATA_TTL_SECONDS, TimeUnit.SECONDS);
-
-        try {
-            emailService.sendOtp(email, otp);
-        } catch (Exception e) {
-            log.error("ActionLog.signUp.emailSend.failed email={}, error={}", email, e.getMessage());
-            throw new OTPException("Failed to send OTP email", "Email sending error");
-        }
-        log.info("ActionLog.signUp.end");
-        return "OTP sent to email";
-    }
 
     public void validateOTP(OTPRequestDto otpRequestDto) {
         String email = otpRequestDto.getEmail();
@@ -158,14 +123,14 @@ public class AuthService {
     public AuthenticationDto authenticate(AuthRequestDto authRequestDto) {
         log.info("ActionLog.authenticate.start");
         try {
-            UserEntity user = userRepository.findByEmail(authRequestDto.getEmail()).orElse(null);
+            UserEntity user = userRepository.findByUsername(authRequestDto.getUsername()).orElse(null);
 
             if (user == null) {
                 passwordEncoder.matches(authRequestDto.getPassword(),
                         "$2a$10$dummyHashForTimingAttackPrevention");
                 throw new UserNotAuthorizedException(
-                        ExceptionEnum.EMAIL_OR_PASSWORD_INCORRECT.name(),
-                        ExceptionEnum.EMAIL_OR_PASSWORD_INCORRECT.getLog()
+                        ExceptionEnum.USERNAME_OR_PASSWORD_INCORRECT.name(),
+                        ExceptionEnum.USERNAME_OR_PASSWORD_INCORRECT.getLog()
                 );
             }
 
@@ -182,10 +147,10 @@ public class AuthService {
                     .build();
 
         } catch (UserNotAuthorizedException e) {
-            log.warn("ActionLog.authenticate.failed");  // Detaylı mesaj verme
+            log.warn("ActionLog.authenticate.failed");
             throw new UserNotAuthorizedException(
-                    ExceptionEnum.EMAIL_OR_PASSWORD_INCORRECT.name(),
-                    ExceptionEnum.EMAIL_OR_PASSWORD_INCORRECT.getLog()
+                    ExceptionEnum.USERNAME_OR_PASSWORD_INCORRECT.name(),
+                    ExceptionEnum.USERNAME_OR_PASSWORD_INCORRECT.getLog()
             );
         }
     }
@@ -195,8 +160,8 @@ public class AuthService {
         if (!passwordEncoder.matches(rawPassword, encodedPassword)) {
             log.warn("ActionLog.verifyPassword.failed: Passwords don't match");
             throw new UserNotAuthorizedException(
-                    ExceptionEnum.EMAIL_OR_PASSWORD_INCORRECT.name(),
-                    ExceptionEnum.EMAIL_OR_PASSWORD_INCORRECT.getLog()
+                    ExceptionEnum.USERNAME_OR_PASSWORD_INCORRECT.name(),
+                    ExceptionEnum.USERNAME_OR_PASSWORD_INCORRECT.getLog()
             );
         }
         log.info("ActionLog.verifyPassword.end");
@@ -234,117 +199,117 @@ public class AuthService {
         return "OTP resent to email";
     }
 
-    @Value("${GOOGLE_CLIENT_ID}")
-    private String googleClientId;
+//    @Value("${GOOGLE_CLIENT_ID}")
+//    private String googleClientId;
+//
+//    @Transactional
+//    public AuthenticationDto loginWithGoogle(String idToken) {
+//        log.info("ActionLog.loginWithGoogle.start");
+//
+//        Integer tokenLen = (idToken == null) ? null : idToken.length();
+//        String tokenPrefix = (idToken == null) ? null : idToken.substring(0, Math.min(12, idToken.length()));
+//        log.info("ActionLog.loginWithGoogle.input tokenLen={}, tokenPrefix={}, clientIdPresent={}",
+//                tokenLen, tokenPrefix, StringUtils.hasText(googleClientId));
+//
+//        if (!StringUtils.hasText(googleClientId)) {
+//            log.warn("ActionLog.loginWithGoogle.failed reason=googleClientId_empty");
+//            throw new IllegalStateException("googleClientId is empty. Check GOOGLE_CLIENT_ID env / application.yml mapping");
+//        }
+//        if (!StringUtils.hasText(idToken)) {
+//            log.warn("ActionLog.loginWithGoogle.failed reason=idToken_empty");
+//            throw new IllegalArgumentException("idToken is empty");
+//        }
+//        if (idToken.chars().filter(ch -> ch == '.').count() != 2) {
+//            log.warn("ActionLog.loginWithGoogle.failed reason=idToken_not_jwt tokenPrefix={}", tokenPrefix);
+//            throw new IllegalArgumentException("idToken is not a JWT (must contain 2 dots)");
+//        }
+//
+//        try {
+//            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
+//                    new NetHttpTransport(),
+//                    GsonFactory.getDefaultInstance()
+//            )
+//                    .setAudience(Collections.singletonList(googleClientId))
+//                    .build();
+//
+//            GoogleIdToken googleIdToken = verifier.verify(idToken);
+//
+//            if (googleIdToken == null) {
+//                log.warn("ActionLog.loginWithGoogle.failed reason=google_verify_null tokenPrefix={}", tokenPrefix);
+//                throw new UserNotAuthorizedException(
+//                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
+//                        "Invalid Google ID token"
+//                );
+//            }
+//
+//            GoogleIdToken.Payload payload = googleIdToken.getPayload();
+//            String email = payload.getEmail();
+//            Boolean emailVerified = payload.getEmailVerified();
+//            String name = (String) payload.get("name");
+//            String sub = payload.getSubject();
+//
+//            log.info("ActionLog.loginWithGoogle.googleVerified email={}, emailVerified={}, sub={}",
+//                    email, emailVerified, sub);
+//
+//            if (!StringUtils.hasText(email) || !Boolean.TRUE.equals(emailVerified)) {
+//                log.warn("ActionLog.loginWithGoogle.failed reason=email_not_verified email={}, emailVerified={}",
+//                        email, emailVerified);
+//                throw new UserNotAuthorizedException(
+//                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
+//                        "Google account email is not verified"
+//                );
+//            }
+//
+//            UserEntity userEntity = userRepository.findByEmail(email).orElse(null);
+//
+//            if (userEntity == null) {
+//                log.info("ActionLog.loginWithGoogle.userCreate.start email={}", email);
+//
+//                userEntity = new UserEntity();
+//                userEntity.setEmail(email);
+//                userEntity.setFullName(name);
+//
+//                RoleEntity role = roleRepository.findByName("USER")
+//                        .orElseThrow(() -> new NotFoundException(
+//                                ExceptionEnum.ROLE_NOT_FOUND.name(),
+//                                String.format(ExceptionEnum.ROLE_NOT_FOUND.getLog(), "USER")
+//                        ));
+//                userEntity.setRole(role);
+//
+//                userRepository.save(userEntity);
+//
+//                log.info("ActionLog.loginWithGoogle.userCreate.end userId={}, email={}",
+//                        userEntity.getId(), email);
+//            } else {
+//                log.info("ActionLog.loginWithGoogle.userFound userId={}, email={}",
+//                        userEntity.getId(), email);
+//            }
+//
+//            SecurityContextHolder.getContext().setAuthentication(
+//                    new UsernamePasswordAuthenticationToken(
+//                            userEntity, null, userEntity.getAuthorities()
+//                    )
+//            );
+//
+//            AuthenticationDto auth = generateToken(userEntity);
+//
+//            log.info("ActionLog.loginWithGoogle.end userId={}, email={}", userEntity.getId(), email);
+//            return auth;
+//
+//        } catch (UserNotAuthorizedException e) {
+//            // burada message-i saxla, stacktrace lazım deyil (adətən)
+//            log.warn("ActionLog.loginWithGoogle.failed message={}", e.getMessage());
+//            throw e;
+//        } catch (Exception e) {
+//            log.error("ActionLog.loginWithGoogle.failed error={}", e.getMessage(), e);
+//            throw new UserNotAuthorizedException(
+//                    ExceptionEnum.USER_NOT_AUTHORIZED.name(),
+//                    "Error verifying Google ID token"
+//            );
+//        }
+//    }
 
-    @Transactional
-    public AuthenticationDto loginWithGoogle(String idToken) {
-        log.info("ActionLog.loginWithGoogle.start");
-
-        Integer tokenLen = (idToken == null) ? null : idToken.length();
-        String tokenPrefix = (idToken == null) ? null : idToken.substring(0, Math.min(12, idToken.length()));
-        log.info("ActionLog.loginWithGoogle.input tokenLen={}, tokenPrefix={}, clientIdPresent={}",
-                tokenLen, tokenPrefix, StringUtils.hasText(googleClientId));
-
-        if (!StringUtils.hasText(googleClientId)) {
-            log.warn("ActionLog.loginWithGoogle.failed reason=googleClientId_empty");
-            throw new IllegalStateException("googleClientId is empty. Check GOOGLE_CLIENT_ID env / application.yml mapping");
-        }
-        if (!StringUtils.hasText(idToken)) {
-            log.warn("ActionLog.loginWithGoogle.failed reason=idToken_empty");
-            throw new IllegalArgumentException("idToken is empty");
-        }
-        if (idToken.chars().filter(ch -> ch == '.').count() != 2) {
-            log.warn("ActionLog.loginWithGoogle.failed reason=idToken_not_jwt tokenPrefix={}", tokenPrefix);
-            throw new IllegalArgumentException("idToken is not a JWT (must contain 2 dots)");
-        }
-
-        try {
-            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
-                    new NetHttpTransport(),
-                    GsonFactory.getDefaultInstance()
-            )
-                    .setAudience(Collections.singletonList(googleClientId))
-                    .build();
-
-            GoogleIdToken googleIdToken = verifier.verify(idToken);
-
-            if (googleIdToken == null) {
-                log.warn("ActionLog.loginWithGoogle.failed reason=google_verify_null tokenPrefix={}", tokenPrefix);
-                throw new UserNotAuthorizedException(
-                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
-                        "Invalid Google ID token"
-                );
-            }
-
-            GoogleIdToken.Payload payload = googleIdToken.getPayload();
-            String email = payload.getEmail();
-            Boolean emailVerified = payload.getEmailVerified();
-            String name = (String) payload.get("name");
-            String sub = payload.getSubject();
-
-            log.info("ActionLog.loginWithGoogle.googleVerified email={}, emailVerified={}, sub={}",
-                    email, emailVerified, sub);
-
-            if (!StringUtils.hasText(email) || !Boolean.TRUE.equals(emailVerified)) {
-                log.warn("ActionLog.loginWithGoogle.failed reason=email_not_verified email={}, emailVerified={}",
-                        email, emailVerified);
-                throw new UserNotAuthorizedException(
-                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
-                        "Google account email is not verified"
-                );
-            }
-
-            UserEntity userEntity = userRepository.findByEmail(email).orElse(null);
-
-            if (userEntity == null) {
-                log.info("ActionLog.loginWithGoogle.userCreate.start email={}", email);
-
-                userEntity = new UserEntity();
-                userEntity.setEmail(email);
-                userEntity.setFullName(name);
-
-                RoleEntity role = roleRepository.findByName("USER")
-                        .orElseThrow(() -> new NotFoundException(
-                                ExceptionEnum.ROLE_NOT_FOUND.name(),
-                                String.format(ExceptionEnum.ROLE_NOT_FOUND.getLog(), "USER")
-                        ));
-                userEntity.setRole(role);
-
-                userRepository.save(userEntity);
-
-                log.info("ActionLog.loginWithGoogle.userCreate.end userId={}, email={}",
-                        userEntity.getId(), email);
-            } else {
-                log.info("ActionLog.loginWithGoogle.userFound userId={}, email={}",
-                        userEntity.getId(), email);
-            }
-
-            SecurityContextHolder.getContext().setAuthentication(
-                    new UsernamePasswordAuthenticationToken(
-                            userEntity, null, userEntity.getAuthorities()
-                    )
-            );
-
-            AuthenticationDto auth = generateToken(userEntity);
-
-            log.info("ActionLog.loginWithGoogle.end userId={}, email={}", userEntity.getId(), email);
-            return auth;
-
-        } catch (UserNotAuthorizedException e) {
-            // burada message-i saxla, stacktrace lazım deyil (adətən)
-            log.warn("ActionLog.loginWithGoogle.failed message={}", e.getMessage());
-            throw e;
-        } catch (Exception e) {
-            log.error("ActionLog.loginWithGoogle.failed error={}", e.getMessage(), e);
-            throw new UserNotAuthorizedException(
-                    ExceptionEnum.USER_NOT_AUTHORIZED.name(),
-                    "Error verifying Google ID token"
-            );
-        }
-    }
-
-    @Transactional
+//    @Transactional
 //    public AuthenticationDto loginWithGoogle(String idToken) {
 //        log.info("ActionLog.loginWithGoogle.start");
 //

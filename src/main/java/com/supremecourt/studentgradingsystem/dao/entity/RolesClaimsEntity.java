@@ -33,6 +33,6 @@ public class RolesClaimsEntity extends BaseEntity {
     RoleEntity role;
     @ManyToOne(cascade = CascadeType.MERGE)
     @JoinColumn(name="claims_id",referencedColumnName = "id")
-    ClaimsEntity claim;
+    ClaimEntity claim;
 
 }

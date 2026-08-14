@@ -55,7 +55,7 @@ public class NotificationService {
 
     @Transactional
     public void saveAndSendNotification(UserEntity user, Note note, NotificationType type, Long relatedId) {
-        log.info("ActionLog.saveAndSendNotification.start user {} type {}", user.getFullName(), type);
+        log.info("ActionLog.saveAndSendNotification.start user {} type {}", user.getFirstName(), type);
 
         NotificationEntity notification = NotificationEntity.builder()
                 .title(note.getSubject())
@@ -73,7 +73,7 @@ public class NotificationService {
             });
         }
 
-        log.info("ActionLog.saveAndSendNotification.end user {} type {}", user.getFullName(), type);
+        log.info("ActionLog.saveAndSendNotification.end user {} type {}", user.getFirstName(), type);
     }
 
     @Transactional

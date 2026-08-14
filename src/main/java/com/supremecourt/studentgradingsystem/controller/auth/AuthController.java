@@ -18,15 +18,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/v1/auth")
+@RequestMapping("/auth")
 public class AuthController {
 
     private final AuthService authService;
-
-    @PostMapping("/sign-up")
-    public String signUp(@RequestBody UserRegistrationDto userRegistrationDto) {
-        return authService.signUp(userRegistrationDto);
-    }
 
     @PostMapping("/login")
     public AuthenticationDto login(@RequestBody AuthRequestDto authRequestDto) {
@@ -42,11 +37,6 @@ public class AuthController {
     public AuthenticationDto resetPassword(@RequestBody ResetPasswordRequestDto resetPasswordRequestDto) {
         return authService.resetPassword(resetPasswordRequestDto);
     }
-
-//    @PostMapping("/google")
-//    public AuthenticationDto googleLogin(@RequestBody GoogleLoginRequestDto requestDto) {
-//        return authService.loginWithGoogle(requestDto.getIdToken());
-//    }
 
     @PostMapping("/verify/otp")
     public AuthenticationDto verifyOTP(@RequestBody OTPRequestDto otpRequestDto) {

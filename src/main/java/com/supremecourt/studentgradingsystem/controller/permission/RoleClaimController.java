@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.List;
 
 @RestController
-@RequestMapping("/v1/role-claim")
+@RequestMapping("/role-claim")
 @RequiredArgsConstructor
 public class RoleClaimController {
     private final RoleClaimService roleClaimService;

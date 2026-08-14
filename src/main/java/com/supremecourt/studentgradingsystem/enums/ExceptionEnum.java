@@ -14,7 +14,7 @@ public enum ExceptionEnum {
     FAILED_TO_DELETE_IMAGE("ActionLog.findById.error failed to delete image %s"),
     FAILED_TO_UPLOAD_IMAGE("ActionLog.findById.error failed to upload image %s"),
     USER_NOT_FOUND_BY_EMAIL("ActionLog.findByEmail.error user %s not found"),
-    EMAIL_OR_PASSWORD_INCORRECT("ActionLog.authentication.error email or password incorrect"),
+    USERNAME_OR_PASSWORD_INCORRECT("ActionLog.authentication.error username or password incorrect"),
     USER_NOT_AUTHORIZED("ActionLog.unauthorized.error user not authorized"),
     JWT_TOKEN_EXPIRED("ActionLog.jwtExpired.error JWT token expired for user %s"),
     NOT_PERMITTED("ActionLog.notPermitted.error user %d does not have permission to perform this action"),

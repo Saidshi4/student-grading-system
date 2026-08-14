@@ -1,7 +1,7 @@
 package com.supremecourt.studentgradingsystem.service.permission;
 
 
-import com.supremecourt.studentgradingsystem.dao.entity.ClaimsEntity;
+import com.supremecourt.studentgradingsystem.dao.entity.ClaimEntity;
 import com.supremecourt.studentgradingsystem.dao.repository.ClaimRepository;
 import com.supremecourt.studentgradingsystem.mapper.ClaimMapper;
 import com.supremecourt.studentgradingsystem.model.request.ClaimSaveDto;
@@ -27,8 +27,8 @@ public class ClaimService {
 
     public Long createClaim(ClaimSaveDto claimSaveDto){
         log.info("ActionLog.createClaim.start");
-        ClaimsEntity claimsEntity = claimMapper.mapSaveDtoToEntity(claimSaveDto);
-        ClaimsEntity savedClaim= claimRepository.save(claimsEntity);
+        ClaimEntity claimEntity = claimMapper.mapSaveDtoToEntity(claimSaveDto);
+        ClaimEntity savedClaim= claimRepository.save(claimEntity);
         log.info("ActionLog.createClaim.end");
         return savedClaim.getId();
     }

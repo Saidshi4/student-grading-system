@@ -18,6 +18,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.Table;
 import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.NonNull;
@@ -37,6 +38,7 @@ import java.util.List;
 @Getter
 @Setter
 @Entity
+@Builder
 @Table(name = "users", indexes = {
         @Index(name = "ux_users_phoneNumber", columnList = "phoneNumber", unique = true),
         @Index(name = "ux_users_email", columnList = "email", unique = true),
@@ -53,10 +55,13 @@ public class UserEntity extends BaseEntity implements UserDetails {
     private String lastName;
     private String phoneNumber;
     private String email;
+    @Column(name = "username", nullable = false, unique = true, length = 50)
+    private String username;
     private String password;
-    private LocalDate birthday;
+    private LocalDate birthDate;
     private String imageUrl;
 
+    @Builder.Default
     @Column(name = "token_version", nullable = false)
     private Integer tokenVersion = 0;
     private Instant passwordChangedAt;
@@ -83,7 +88,7 @@ public class UserEntity extends BaseEntity implements UserDetails {
     @NonNull
     @Override
     public String getUsername() {
-        return this.email;
+        return this.username;
     }
 
     @NonNull

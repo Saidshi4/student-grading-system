@@ -30,4 +30,7 @@ public class GroupEntity extends BaseEntity {
 
     @OneToMany(mappedBy = "group")
     private List<StudentEntity> students;
+
+    @OneToMany(mappedBy = "group")
+    private List<CourseOfferingEntity> courseOfferings;
 }

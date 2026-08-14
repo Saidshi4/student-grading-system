@@ -43,5 +43,5 @@ public class MenuEntity extends BaseEntity {
     List<ComponentEntity> components;
     @OneToOne
     @JoinColumn(name="claim_id")
-    ClaimsEntity claims;
+    ClaimEntity claims;
 }

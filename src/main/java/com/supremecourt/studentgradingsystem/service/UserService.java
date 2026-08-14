@@ -1,16 +1,20 @@
 package com.supremecourt.studentgradingsystem.service;
 
+import com.supremecourt.studentgradingsystem.dao.entity.RoleEntity;
 import com.supremecourt.studentgradingsystem.dao.entity.UserEntity;
 import com.supremecourt.studentgradingsystem.dao.repository.RoleRepository;
 import com.supremecourt.studentgradingsystem.dao.repository.UserRepository;
 import com.supremecourt.studentgradingsystem.enums.ExceptionEnum;
 import com.supremecourt.studentgradingsystem.exception.NotFoundException;
 import com.supremecourt.studentgradingsystem.mapper.UserMapper;
+import com.supremecourt.studentgradingsystem.model.request.UserRegistrationDto;
 import com.supremecourt.studentgradingsystem.model.response.UserGetDto;
 import com.supremecourt.studentgradingsystem.service.firebase.FirebaseService;
 import com.supremecourt.studentgradingsystem.service.firebase.MediaService;
+import com.supremecourt.studentgradingsystem.utils.UsernameAndPasswordGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -26,6 +30,8 @@ public class UserService {
     private final UserMapper userMapper;
     private final RoleRepository roleRepository;
     private final FirebaseService firebaseService;
+    private final UsernameAndPasswordGenerator usernameAndPasswordGenerator;
+    private final PasswordEncoder passwordEncoder;
 
     public UserEntity findById(Long userId) {
         log.info("ActionLog.userFindById.start userId {}", userId);
@@ -37,16 +43,21 @@ public class UserService {
         return userEntity;
     }
 
-    public List<UserGetDto> filterUsersByFullName(String fullName) {
-        log.info("ActionLog.filterUsersByFullName.start fullName {}", fullName);
-        List<UserEntity> userEntities = userRepository.findByFullNameContainingIgnoreCase(fullName).stream()
-                .filter(UserEntity::isEnabled)
-                .toList();
-        List<UserGetDto> userGetDtos = userMapper.mapEntityListToGetDtoList(userEntities);
-        log.info("ActionLog.filterUsersByFullName.end fullName {}", fullName);
-        return userGetDtos;
+    public void createUser(UserRegistrationDto userRegistrationDto) {
+        log.info("ActionLog.createUser.start username {}", userRegistrationDto.getFirstName());
+        UserEntity userEntity = userMapper.mapUserRegistrationDtoToEntity(userRegistrationDto);
+        userEntity.setUsername(usernameAndPasswordGenerator.generateUsername(userRegistrationDto));
+        String password = usernameAndPasswordGenerator.generatePassword(userRegistrationDto);
+        userEntity.setPassword(passwordEncoder.encode(password));
+        String role = userRegistrationDto.getRole().toUpperCase();
+        RoleEntity roleEntity = roleRepository.findByName(role)
+                .orElseThrow(() -> new NotFoundException(
+                        ExceptionEnum.ROLE_NOT_FOUND.name(), String.format(ExceptionEnum.ROLE_NOT_FOUND.getLog(), role)
+                ));
+        userEntity.setRole(roleEntity);
+        userRepository.save(userEntity);
+        log.info("ActionLog.createUser.end username {}", userRegistrationDto.getFirstName());
     }
-
 
     public UserGetDto changeImage(Long userId, MultipartFile image) {
         log.info("ActionLog.changeImage.start userId {}", userId);
@@ -83,35 +94,5 @@ public class UserService {
         return savedDto;
     }
 
-    @Transactional
-    public UserEntity findOrCreateWalkInUser(String phoneNumber, String fullName) {
-        log.info("ActionLog.findOrCreateWalkInUser.start phoneNumber {} fullName {}", phoneNumber, fullName);
 
-        if (phoneNumber == null || phoneNumber.trim().isEmpty()) {
-            UserEntity walkIn = userRepository.findByPhoneNumber("+994000000000")
-                    .orElseGet(() -> {
-                        UserEntity u = new UserEntity();
-                        u.setFullName("Walk-in Customer");
-                        u.setPhoneNumber("+994000000000");
-                        u.setTokenVersion(0);
-                        roleRepository.findByName("USER").ifPresent(u::setRole);
-                        return userRepository.save(u);
-                    });
-            log.info("ActionLog.findOrCreateWalkInUser.end default walk-in user resolved: id={}", walkIn.getId());
-            return walkIn;
-        }
-
-        String cleanedPhone = phoneNumber.trim();
-        UserEntity user = userRepository.findByPhoneNumber(cleanedPhone)
-                .orElseGet(() -> {
-                    UserEntity u = new UserEntity();
-                    u.setFullName(fullName != null && !fullName.trim().isEmpty() ? fullName.trim() : "Guest Customer");
-                    u.setPhoneNumber(cleanedPhone);
-                    u.setTokenVersion(0);
-                    roleRepository.findByName("USER").ifPresent(u::setRole);
-                    return userRepository.save(u);
-                });
-        log.info("ActionLog.findOrCreateWalkInUser.end resolved user: id={}", user.getId());
-        return user;
-    }
 }

@@ -1,6 +1,6 @@
 package com.supremecourt.studentgradingsystem.service.permission;
 
-import com.supremecourt.studentgradingsystem.dao.entity.ClaimsEntity;
+import com.supremecourt.studentgradingsystem.dao.entity.ClaimEntity;
 import com.supremecourt.studentgradingsystem.dao.entity.RoleEntity;
 import com.supremecourt.studentgradingsystem.dao.entity.RolesClaimsEntity;
 import com.supremecourt.studentgradingsystem.dao.repository.ClaimRepository;
@@ -51,7 +51,7 @@ public class RoleClaimService {
                         throw new NotFoundException("Rol tapılmadı!",
                                 String.format(ExceptionEnum.ROLE_NOT_FOUND.getLog(), roleClaimRequest1.getRoleId()));
                     });
-                    ClaimsEntity claim=claimRepository.findById(roleClaimRequest1.getClaimId()).orElseThrow(()->{
+                    ClaimEntity claim=claimRepository.findById(roleClaimRequest1.getClaimId()).orElseThrow(()->{
                         throw new NotFoundException("Claim tapılmadı!",
                                 String.format(ExceptionEnum.CLAIM_NOT_FOUND.getLog(), roleClaimRequest1.getClaimId()));
                     });

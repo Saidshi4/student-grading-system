@@ -35,5 +35,5 @@ public class ComponentEntity extends BaseEntity {
     MenuEntity menu;
     @OneToOne
     @JoinColumn(name="claim_id")
-    ClaimsEntity claims;
+    ClaimEntity claims;
 }
