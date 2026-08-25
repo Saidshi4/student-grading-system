@@ -3,11 +3,11 @@ package com.supremecourt.studentgradingsystem.controller.auth;
 import com.supremecourt.studentgradingsystem.model.request.OTPRequestDto;
 import com.supremecourt.studentgradingsystem.model.request.ResendOTPRequestDto;
 import com.supremecourt.studentgradingsystem.model.request.ResetPasswordRequestDto;
-import com.supremecourt.studentgradingsystem.model.request.UserRegistrationDto;
 import com.supremecourt.studentgradingsystem.model.request.auth.AuthRequestDto;
 import com.supremecourt.studentgradingsystem.model.request.auth.AuthenticationDto;
 import com.supremecourt.studentgradingsystem.model.response.ResponseDto;
 import com.supremecourt.studentgradingsystem.service.auth.AuthService;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,8 +24,9 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/login")
-    public AuthenticationDto login(@RequestBody AuthRequestDto authRequestDto) {
-        return authService.authenticate(authRequestDto);
+    public AuthenticationDto login(@RequestBody AuthRequestDto authRequestDto,
+                                   HttpServletResponse response) {
+        return authService.authenticate(authRequestDto, response);
     }
 
     @PostMapping("/forgot-password")
@@ -34,23 +35,29 @@ public class AuthController {
     }
 
     @PostMapping("/reset-password")
-    public AuthenticationDto resetPassword(@RequestBody ResetPasswordRequestDto resetPasswordRequestDto) {
-        return authService.resetPassword(resetPasswordRequestDto);
+    public AuthenticationDto resetPassword(@RequestBody ResetPasswordRequestDto resetPasswordRequestDto,
+                                           HttpServletResponse response) {
+        return authService.resetPassword(resetPasswordRequestDto, response);
     }
 
     @PostMapping("/verify/otp")
-    public AuthenticationDto verifyOTP(@RequestBody OTPRequestDto otpRequestDto) {
-        return authService.verifyOTP(otpRequestDto);
+    public AuthenticationDto verifyOTP(@RequestBody OTPRequestDto otpRequestDto,
+                                       HttpServletResponse response) {
+        return authService.verifyOTP(otpRequestDto, response);
     }
 
     @PostMapping("/refresh/token")
-    public AuthenticationDto refreshToken(@CookieValue("refreshToken") String refreshToken) {
-        return authService.refreshToken(refreshToken);
+    public AuthenticationDto refreshToken(
+            @CookieValue(value = "refreshToken", required = false) String refreshToken,
+            HttpServletResponse response) {
+        return authService.refreshToken(refreshToken, response);
     }
 
     @PostMapping("/logout")
-    public void logout(@RequestParam("accessToken") String accessToken) {
-        authService.logout(accessToken);
+    public void logout(@RequestParam("accessToken") String accessToken,
+                       @CookieValue(value = "refreshToken", required = false) String refreshToken,
+                       HttpServletResponse response) {
+        authService.logout(accessToken, refreshToken, response);
     }
 
     @PostMapping("/resend/otp")

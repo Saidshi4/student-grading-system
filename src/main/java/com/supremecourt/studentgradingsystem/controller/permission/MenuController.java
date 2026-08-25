@@ -1,5 +1,6 @@
 package com.supremecourt.studentgradingsystem.controller.permission;
 
+import com.supremecourt.studentgradingsystem.annotation.RequiresPermission;
 import com.supremecourt.studentgradingsystem.model.request.MenuSaveDto;
 import com.supremecourt.studentgradingsystem.model.response.MenuResponseDto;
 import com.supremecourt.studentgradingsystem.service.MenuService;
@@ -31,6 +32,7 @@ public class MenuController {
     }
 
     @PostMapping
+    @RequiresPermission("menu_create")
     public void createMenu(@RequestBody MenuSaveDto menuSaveDto) {
         menuService.createMenu(menuSaveDto);
     }

@@ -15,9 +15,32 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Configuration
 @RequiredArgsConstructor
 public class DbConfig {
+
+    private static final List<String> ALL_CLAIMS = List.of(
+            "create", "update", "delete",
+            "role_create", "role_read", "role_update", "role_delete",
+            "role_claim_read_matrix", "role_claim_update", "role_claim_update_matrix",
+            "claim_create", "menu_create",
+            "create_user", "user_read", "user_update", "user_delete",
+            "student_create", "student_update", "student_delete",
+            "teacher_create", "teacher_update", "teacher_delete",
+            "group_create", "group_update", "group_delete",
+            "subject_create", "subject_update", "subject_delete",
+            "semester_create", "semester_update", "semester_delete",
+            "course_offering_create", "course_offering_update", "course_offering_delete",
+            "enrollment_create", "enrollment_update", "enrollment_delete",
+            "grade_create", "grade_update", "grade_delete",
+            "class_schedule_create", "class_schedule_update", "class_schedule_delete"
+    );
+
+    private static final List<String> TEACHER_CLAIMS = List.of(
+            "grade_create", "grade_update", "grade_delete"
+    );
 
     private final RoleRepository roleRepository;
     private final ClaimRepository claimRepository;
@@ -32,51 +55,19 @@ public class DbConfig {
 
     @Transactional
     void seed() {
-        // 1) Roles
-        RoleEntity adminRole = roleRepository.findByName("ADMIN")
-                .orElseGet(() -> roleRepository.save(RoleEntity.builder().name("ADMIN").build()));
+        RoleEntity adminRole = ensureRole("ADMIN");
+        ensureRole("USER");
+        RoleEntity teacherRole = ensureRole("TEACHER");
+        ensureRole("STUDENT");
 
-        roleRepository.findByName("USER")
-                .orElseGet(() -> roleRepository.save(RoleEntity.builder().name("USER").build()));
+        for (String claimName : ALL_CLAIMS) {
+            ensureRoleClaim(adminRole, ensureClaim(claimName));
+        }
+        for (String claimName : TEACHER_CLAIMS) {
+            ensureRoleClaim(teacherRole, ensureClaim(claimName));
+        }
 
-        // 2) Claims
-        ClaimEntity createClaim = claimRepository.findByName("create")
-                .orElseGet(() -> claimRepository.save(ClaimEntity.builder().name("create").build()));
-
-        ClaimEntity updateClaim = claimRepository.findByName("update")
-                .orElseGet(() -> claimRepository.save(ClaimEntity.builder().name("update").build()));
-
-        ClaimEntity deleteClaim = claimRepository.findByName("delete")
-                .orElseGet(() -> claimRepository.save(ClaimEntity.builder().name("delete").build()));
-
-        ClaimEntity roleCreateClaim = claimRepository.findByName("role_create")
-                .orElseGet(() -> claimRepository.save(ClaimEntity.builder().name("role_create").build()));
-        ClaimEntity roleReadClaim = claimRepository.findByName("role_read")
-                .orElseGet(() -> claimRepository.save(ClaimEntity.builder().name("role_read").build()));
-        ClaimEntity roleUpdateClaim = claimRepository.findByName("role_update")
-                .orElseGet(() -> claimRepository.save(ClaimEntity.builder().name("role_update").build()));
-        ClaimEntity roleDeleteClaim = claimRepository.findByName("role_delete")
-                .orElseGet(() -> claimRepository.save(ClaimEntity.builder().name("role_delete").build()));
-        ClaimEntity roleClaimReadMatrix = claimRepository.findByName("role_claim_read_matrix")
-                .orElseGet(() -> claimRepository.save(ClaimEntity.builder().name("role_claim_read_matrix").build()));
-        ClaimEntity roleClaimUpdateMatrix = claimRepository.findByName("role_claim_update_matrix")
-                .orElseGet(() -> claimRepository.save(ClaimEntity.builder().name("role_claim_update_matrix").build()));
-
-        // 3) Role-Claim mapping (ADMIN -> create, update, delete)
-        ensureRoleClaim(adminRole, createClaim);
-        ensureRoleClaim(adminRole, updateClaim);
-        ensureRoleClaim(adminRole, deleteClaim);
-
-        ensureRoleClaim(adminRole, roleCreateClaim);
-        ensureRoleClaim(adminRole, roleReadClaim);
-        ensureRoleClaim(adminRole, roleUpdateClaim);
-        ensureRoleClaim(adminRole, roleDeleteClaim);
-
-        ensureRoleClaim(adminRole, roleClaimReadMatrix);
-        ensureRoleClaim(adminRole, roleClaimUpdateMatrix);
-
-        // 4) Adding a user with Admin role
-        if (userRepository.count() == 0 && roleRepository.findByName("ADMIN").isPresent()) {
+        if (userRepository.count() == 0) {
             UserEntity user = UserEntity.builder()
                     .firstName("Admin")
                     .lastName("Admin")
@@ -89,9 +80,18 @@ public class DbConfig {
         }
     }
 
+    private RoleEntity ensureRole(String name) {
+        return roleRepository.findByName(name)
+                .orElseGet(() -> roleRepository.save(RoleEntity.builder().name(name).build()));
+    }
+
+    private ClaimEntity ensureClaim(String name) {
+        return claimRepository.findByName(name)
+                .orElseGet(() -> claimRepository.save(ClaimEntity.builder().name(name).build()));
+    }
+
     private void ensureRoleClaim(RoleEntity role, ClaimEntity claim) {
-        boolean exists = rolesClaimsRepository.existsByRoleAndClaim(role, claim);
-        if (!exists) {
+        if (!rolesClaimsRepository.existsByRoleAndClaim(role, claim)) {
             rolesClaimsRepository.save(
                     RolesClaimsEntity.builder()
                             .role(role)

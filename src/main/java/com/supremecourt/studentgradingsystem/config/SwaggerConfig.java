@@ -28,7 +28,7 @@ public class SwaggerConfig {
                 .title("Student Grading System API")
                 .version("1.0")
                 .contact(contact)
-                .description("API for Student Grading System — auth, roles, claims, and menus.");
+                .description("API for Student Grading System — students, teachers, courses, grades, transcripts, and reports.");
 
         return new OpenAPI().info(info)
                 .addSecurityItem(new SecurityRequirement().addList("Authorization"));

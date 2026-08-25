@@ -8,6 +8,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -22,7 +23,13 @@ import lombok.experimental.FieldDefaults;
 @Builder
 @Getter
 @Setter
-@Table(name = "roles_claims")
+@Table(
+        name = "roles_claims",
+        uniqueConstraints = @UniqueConstraint(
+                name = "uk_roles_claims_role_claim",
+                columnNames = {"roles_id", "claims_id"}
+        )
+)
 @FieldDefaults(level= AccessLevel.PRIVATE)
 public class RolesClaimsEntity extends BaseEntity {
     @Id

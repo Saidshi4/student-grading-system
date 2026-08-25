@@ -22,7 +22,7 @@ import java.util.List;
 public class GroupEntity extends BaseEntity {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private int id;
+    private Long id;
     private String name;
     private String code;
     private String program;

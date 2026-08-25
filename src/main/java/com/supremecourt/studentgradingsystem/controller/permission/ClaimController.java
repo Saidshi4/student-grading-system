@@ -16,7 +16,7 @@ public class ClaimController {
     private final ClaimService claimService;
 
     @PostMapping
-    @RequiresPermission("create")
+    @RequiresPermission("claim_create")
     public Long createClaim(@RequestBody ClaimSaveDto claimSaveDto) {
         return claimService.createClaim(claimSaveDto);
     }

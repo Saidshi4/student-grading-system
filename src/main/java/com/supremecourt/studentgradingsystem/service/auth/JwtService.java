@@ -14,6 +14,8 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -24,11 +26,18 @@ import java.util.stream.Collectors;
 @Service
 public class JwtService {
 
+    private static final String CLAIM_TOKEN_TYPE = "tokenType";
+    private static final String ACCESS_TOKEN = "access";
+    private static final String REFRESH_TOKEN = "refresh";
+
     @Value("${spring.jwt.secret}")
     private String secret;
 
     @Value("${spring.jwt.expiration}")
     private long jwtExpiration;
+
+    @Value("${spring.jwt.refresh-expiration}")
+    private long refreshExpiration;
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
@@ -61,13 +70,17 @@ public class JwtService {
 
     public String generateToken(UserDetails userDetails) {
         Map<String, Object> extraClaims = new HashMap<>();
-        return generateToken(extraClaims, userDetails);
+        extraClaims.put(CLAIM_TOKEN_TYPE, ACCESS_TOKEN);
+        return buildToken(extraClaims, userDetails, jwtExpiration);
     }
 
-    public String generateToken(
-            Map<String, Object> extraClaims,
-            UserDetails userDetails
-    ) {
+    public String generateRefreshToken(UserDetails userDetails) {
+        Map<String, Object> extraClaims = new HashMap<>();
+        extraClaims.put(CLAIM_TOKEN_TYPE, REFRESH_TOKEN);
+        return buildToken(extraClaims, userDetails, refreshExpiration);
+    }
+
+    private String buildToken(Map<String, Object> extraClaims, UserDetails userDetails, long expirationMs) {
         UserEntity userEntity = (UserEntity) userDetails;
         extraClaims.put("userId", userEntity.getId());
         extraClaims.put("role", userEntity.getAuthorities().iterator().next().getAuthority());
@@ -76,7 +89,7 @@ public class JwtService {
         var builder = Jwts.builder()
                 .subject(userDetails.getUsername())
                 .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + jwtExpiration));
+                .expiration(new Date(System.currentTimeMillis() + expirationMs));
 
         extraClaims.forEach(builder::claim);
 
@@ -87,14 +100,57 @@ public class JwtService {
 
     public Boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
-        return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
+        return username.equals(userDetails.getUsername())
+                && !isTokenExpired(token)
+                && isAccessToken(token)
+                && isTokenVersionValid(token, userDetails);
+    }
+
+    public boolean isAccessToken(String token) {
+        return ACCESS_TOKEN.equals(extractTokenType(token));
+    }
+
+    public boolean isRefreshToken(String token) {
+        return REFRESH_TOKEN.equals(extractTokenType(token));
+    }
+
+    public boolean isTokenVersionValid(String token, UserDetails userDetails) {
+        if (!(userDetails instanceof UserEntity userEntity)) {
+            return false;
+        }
+        Integer tokenVersion = extractTokenVersion(token);
+        return tokenVersion != null && tokenVersion.equals(userEntity.getTokenVersion());
+    }
+
+    public String extractTokenType(String token) {
+        return extractClaim(token, claims -> claims.get(CLAIM_TOKEN_TYPE, String.class));
+    }
+
+    public Integer extractTokenVersion(String token) {
+        return extractClaim(token, claims -> {
+            Object value = claims.get("tokenVersion");
+            if (value instanceof Number number) {
+                return number.intValue();
+            }
+            return null;
+        });
+    }
+
+    public long getRefreshExpirationMs() {
+        return refreshExpiration;
+    }
+
+    public long getRemainingTtlMinutes(String token) {
+        Date expiration = extractExpiration(token);
+        long minutes = Duration.between(Instant.now(), expiration.toInstant()).toMinutes();
+        return Math.max(1, minutes);
     }
 
     private Boolean isTokenExpired(String token) {
         return extractExpiration(token).before(new Date());
     }
 
-    private Date extractExpiration(String token) {
+    public Date extractExpiration(String token) {
         return extractClaim(token, Claims::getExpiration);
     }
 
@@ -127,7 +183,7 @@ public class JwtService {
         try {
             byte[] keyBytes = Decoders.BASE64.decode(secret);
             return Keys.hmacShaKeyFor(keyBytes);
-        } catch (IllegalArgumentException ex) {
+        } catch (RuntimeException ex) {
             byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
             return Keys.hmacShaKeyFor(keyBytes);
         }

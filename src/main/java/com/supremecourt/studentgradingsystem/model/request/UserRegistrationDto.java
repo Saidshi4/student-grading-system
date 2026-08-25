@@ -23,4 +23,6 @@ public class UserRegistrationDto {
     @NotBlank
     private String role;
     private LocalDate birthDate;
+    private Long groupId;
+    private String department;
 }

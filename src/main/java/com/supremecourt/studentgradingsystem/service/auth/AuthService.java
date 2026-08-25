@@ -1,59 +1,55 @@
 package com.supremecourt.studentgradingsystem.service.auth;
 
-import com.supremecourt.studentgradingsystem.dao.entity.RoleEntity;
 import com.supremecourt.studentgradingsystem.dao.entity.UserEntity;
-import com.supremecourt.studentgradingsystem.dao.repository.RoleRepository;
 import com.supremecourt.studentgradingsystem.dao.repository.UserRepository;
-import com.supremecourt.studentgradingsystem.enums.EntranceType;
 import com.supremecourt.studentgradingsystem.enums.ExceptionEnum;
+import com.supremecourt.studentgradingsystem.exception.JwtExpiredException;
 import com.supremecourt.studentgradingsystem.exception.NotFoundException;
 import com.supremecourt.studentgradingsystem.exception.OTPException;
 import com.supremecourt.studentgradingsystem.exception.PasswordResetException;
 import com.supremecourt.studentgradingsystem.exception.UserNotAuthorizedException;
-import com.supremecourt.studentgradingsystem.mapper.UserMapper;
 import com.supremecourt.studentgradingsystem.model.request.OTPRequestDto;
 import com.supremecourt.studentgradingsystem.model.request.ResendOTPRequestDto;
 import com.supremecourt.studentgradingsystem.model.request.ResetPasswordRequestDto;
-import com.supremecourt.studentgradingsystem.model.request.UserRegistrationDto;
 import com.supremecourt.studentgradingsystem.model.request.auth.AuthRequestDto;
 import com.supremecourt.studentgradingsystem.model.request.auth.AuthenticationDto;
 import com.supremecourt.studentgradingsystem.model.response.ResponseDto;
 import com.supremecourt.studentgradingsystem.service.mail.EmailService;
 import com.supremecourt.studentgradingsystem.utils.OTPCodeGenerator;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.ResponseCookie;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import tools.jackson.databind.ObjectMapper;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
     private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
-    private final UserMapper userMapper;
     private final JwtService jwtService;
     private final JwtBlacklistService jwtBlacklistService;
     private final EmailService emailService;
     private final RedisTemplate<String, Object> redisTemplate;
-    private final ObjectMapper objectMapper;
 
+    private static final String REFRESH_COOKIE_NAME = "refreshToken";
+    private static final String REFRESH_COOKIE_PATH = "/auth";
     private static final long OTP_TTL_SECONDS = 180L;
-    private static final long SIGNUP_DATA_TTL_SECONDS = 600L;
     private static final int MAX_WRONG_OTP_ATTEMPTS = 5;
     private static final long WRONG_OTP_BLOCK_MINUTES = 5L;
     private static final long RESEND_LIMIT_SECONDS = 60L;
@@ -62,7 +58,6 @@ public class AuthService {
     public void validateOTP(OTPRequestDto otpRequestDto) {
         String email = otpRequestDto.getEmail();
 
-        // Block check
         String blockKey = email + ":OTP:BLOCK";
         Long blockTtl = redisTemplate.getExpire(blockKey, TimeUnit.SECONDS);
         if (blockTtl > 0) {
@@ -82,7 +77,6 @@ public class AuthService {
             int next = attempts == null ? 1 : attempts + 1;
             redisTemplate.opsForValue().set(attemptsKey, next, WRONG_OTP_BLOCK_MINUTES, TimeUnit.MINUTES);
             if (next >= MAX_WRONG_OTP_ATTEMPTS) {
-                // set block
                 redisTemplate.opsForValue().set(blockKey, 1, WRONG_OTP_BLOCK_MINUTES, TimeUnit.MINUTES);
             }
             throw new OTPException("OTP code is incorrect!", "Wrong OTP attempt " + next);
@@ -91,36 +85,19 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthenticationDto verifyOTP(OTPRequestDto otpRequestDto) {
+    public AuthenticationDto verifyOTP(OTPRequestDto otpRequestDto, HttpServletResponse response) {
         log.info("ActionLog.verifyOTP.start");
 
         validateOTP(otpRequestDto);
 
-        String email = otpRequestDto.getEmail();
-        String keyData = email + ":Data";
+        UserEntity user = getUserByEmailOrThrow(otpRequestDto.getEmail());
+        redisTemplate.delete(otpRequestDto.getEmail() + ":OTP");
 
-        if (EntranceType.SIGNUP.equals(otpRequestDto.getEntranceType())) {
-            Object cachedObj = redisTemplate.opsForValue().get(keyData);
-            if (cachedObj == null) throw new NotFoundException("User data not found in cache!", "Cache error");
-
-            UserRegistrationDto dto = objectMapper.convertValue(cachedObj, UserRegistrationDto.class);
-
-            AuthenticationDto authDto = completeSignUp(dto);
-
-            redisTemplate.delete(email + ":OTP");
-            redisTemplate.delete(keyData);
-
-            log.info("ActionLog.verifyOTP.end");
-            return authDto;
-        }
-        else {
-            UserEntity user = getUserByEmailOrThrow(email);
-            redisTemplate.delete(email + ":OTP");
-            return generateToken(user);
-        }
+        log.info("ActionLog.verifyOTP.end");
+        return issueTokens(user, response);
     }
 
-    public AuthenticationDto authenticate(AuthRequestDto authRequestDto) {
+    public AuthenticationDto authenticate(AuthRequestDto authRequestDto, HttpServletResponse response) {
         log.info("ActionLog.authenticate.start");
         try {
             UserEntity user = userRepository.findByUsername(authRequestDto.getUsername()).orElse(null);
@@ -141,10 +118,7 @@ public class AuthService {
             SecurityContextHolder.getContext().setAuthentication(authToken);
 
             log.info("ActionLog.authenticate.end");
-            var accessToken = jwtService.generateToken(user);
-            return AuthenticationDto.builder()
-                    .token(accessToken)
-                    .build();
+            return issueTokens(user, response);
 
         } catch (UserNotAuthorizedException e) {
             log.warn("ActionLog.authenticate.failed");
@@ -167,18 +141,10 @@ public class AuthService {
         log.info("ActionLog.verifyPassword.end");
     }
 
-    @Transactional
-    public AuthenticationDto completeSignUp(UserRegistrationDto dto) {
-        UserEntity user = userMapper.mapUserRegistrationDtoToEntity(dto);
-        setRolesAndSave(user);
-        return generateToken(user);
-    }
-
     public String resendOTP(ResendOTPRequestDto dto) {
         log.info("Resend OTP Started...");
         String email = dto.getEmail();
 
-        // rate limit
         String resendKey = email + ":OTP:RESEND_LIMIT";
         String marker = (String) redisTemplate.opsForValue().get(resendKey);
         if (StringUtils.hasText(marker)) {
@@ -199,250 +165,76 @@ public class AuthService {
         return "OTP resent to email";
     }
 
-//    @Value("${GOOGLE_CLIENT_ID}")
-//    private String googleClientId;
-//
-//    @Transactional
-//    public AuthenticationDto loginWithGoogle(String idToken) {
-//        log.info("ActionLog.loginWithGoogle.start");
-//
-//        Integer tokenLen = (idToken == null) ? null : idToken.length();
-//        String tokenPrefix = (idToken == null) ? null : idToken.substring(0, Math.min(12, idToken.length()));
-//        log.info("ActionLog.loginWithGoogle.input tokenLen={}, tokenPrefix={}, clientIdPresent={}",
-//                tokenLen, tokenPrefix, StringUtils.hasText(googleClientId));
-//
-//        if (!StringUtils.hasText(googleClientId)) {
-//            log.warn("ActionLog.loginWithGoogle.failed reason=googleClientId_empty");
-//            throw new IllegalStateException("googleClientId is empty. Check GOOGLE_CLIENT_ID env / application.yml mapping");
-//        }
-//        if (!StringUtils.hasText(idToken)) {
-//            log.warn("ActionLog.loginWithGoogle.failed reason=idToken_empty");
-//            throw new IllegalArgumentException("idToken is empty");
-//        }
-//        if (idToken.chars().filter(ch -> ch == '.').count() != 2) {
-//            log.warn("ActionLog.loginWithGoogle.failed reason=idToken_not_jwt tokenPrefix={}", tokenPrefix);
-//            throw new IllegalArgumentException("idToken is not a JWT (must contain 2 dots)");
-//        }
-//
-//        try {
-//            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
-//                    new NetHttpTransport(),
-//                    GsonFactory.getDefaultInstance()
-//            )
-//                    .setAudience(Collections.singletonList(googleClientId))
-//                    .build();
-//
-//            GoogleIdToken googleIdToken = verifier.verify(idToken);
-//
-//            if (googleIdToken == null) {
-//                log.warn("ActionLog.loginWithGoogle.failed reason=google_verify_null tokenPrefix={}", tokenPrefix);
-//                throw new UserNotAuthorizedException(
-//                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
-//                        "Invalid Google ID token"
-//                );
-//            }
-//
-//            GoogleIdToken.Payload payload = googleIdToken.getPayload();
-//            String email = payload.getEmail();
-//            Boolean emailVerified = payload.getEmailVerified();
-//            String name = (String) payload.get("name");
-//            String sub = payload.getSubject();
-//
-//            log.info("ActionLog.loginWithGoogle.googleVerified email={}, emailVerified={}, sub={}",
-//                    email, emailVerified, sub);
-//
-//            if (!StringUtils.hasText(email) || !Boolean.TRUE.equals(emailVerified)) {
-//                log.warn("ActionLog.loginWithGoogle.failed reason=email_not_verified email={}, emailVerified={}",
-//                        email, emailVerified);
-//                throw new UserNotAuthorizedException(
-//                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
-//                        "Google account email is not verified"
-//                );
-//            }
-//
-//            UserEntity userEntity = userRepository.findByEmail(email).orElse(null);
-//
-//            if (userEntity == null) {
-//                log.info("ActionLog.loginWithGoogle.userCreate.start email={}", email);
-//
-//                userEntity = new UserEntity();
-//                userEntity.setEmail(email);
-//                userEntity.setFullName(name);
-//
-//                RoleEntity role = roleRepository.findByName("USER")
-//                        .orElseThrow(() -> new NotFoundException(
-//                                ExceptionEnum.ROLE_NOT_FOUND.name(),
-//                                String.format(ExceptionEnum.ROLE_NOT_FOUND.getLog(), "USER")
-//                        ));
-//                userEntity.setRole(role);
-//
-//                userRepository.save(userEntity);
-//
-//                log.info("ActionLog.loginWithGoogle.userCreate.end userId={}, email={}",
-//                        userEntity.getId(), email);
-//            } else {
-//                log.info("ActionLog.loginWithGoogle.userFound userId={}, email={}",
-//                        userEntity.getId(), email);
-//            }
-//
-//            SecurityContextHolder.getContext().setAuthentication(
-//                    new UsernamePasswordAuthenticationToken(
-//                            userEntity, null, userEntity.getAuthorities()
-//                    )
-//            );
-//
-//            AuthenticationDto auth = generateToken(userEntity);
-//
-//            log.info("ActionLog.loginWithGoogle.end userId={}, email={}", userEntity.getId(), email);
-//            return auth;
-//
-//        } catch (UserNotAuthorizedException e) {
-//            // burada message-i saxla, stacktrace lazım deyil (adətən)
-//            log.warn("ActionLog.loginWithGoogle.failed message={}", e.getMessage());
-//            throw e;
-//        } catch (Exception e) {
-//            log.error("ActionLog.loginWithGoogle.failed error={}", e.getMessage(), e);
-//            throw new UserNotAuthorizedException(
-//                    ExceptionEnum.USER_NOT_AUTHORIZED.name(),
-//                    "Error verifying Google ID token"
-//            );
-//        }
-//    }
+    @Transactional
+    public AuthenticationDto refreshToken(String refreshToken, HttpServletResponse response) {
+        log.info("ActionLog.refreshToken.start");
 
-//    @Transactional
-//    public AuthenticationDto loginWithGoogle(String idToken) {
-//        log.info("ActionLog.loginWithGoogle.start");
-//
-//        Integer tokenLen = (idToken == null) ? null : idToken.length();
-//        String tokenPrefix = (idToken == null) ? null : idToken.substring(0, Math.min(12, idToken.length()));
-//        log.info("ActionLog.loginWithGoogle.input tokenLen={}, tokenPrefix={}, androidIdPresent={}, iosIdPresent={}",
-//                tokenLen, tokenPrefix,
-//                StringUtils.hasText(androidClientId),
-//                StringUtils.hasText(iosClientId));
-//        if (!StringUtils.hasText(idToken)) {
-//            log.warn("ActionLog.loginWithGoogle.failed reason=idToken_empty");
-//            throw new IllegalArgumentException("idToken is empty");
-//        }
-//        if (idToken.chars().filter(ch -> ch == '.').count() != 2) {
-//            log.warn("ActionLog.loginWithGoogle.failed reason=idToken_not_jwt tokenPrefix={}", tokenPrefix);
-//            throw new IllegalArgumentException("idToken is not a JWT (must contain 2 dots)");
-//        }
-//
-//        // Audience list — yalnız dolu olanları əlavə et
-//        List<String> audience = new ArrayList<>();
-//        if (StringUtils.hasText(androidClientId)) audience.add(androidClientId);
-//        if (StringUtils.hasText(iosClientId)) audience.add(iosClientId);
-//
-//        if (audience.isEmpty()) {
-//            log.warn("ActionLog.loginWithGoogle.failed reason=client_ids_empty");
-//            throw new IllegalStateException("No Google client IDs configured. Set GOOGLE_ANDROID_CLIENT_ID / GOOGLE_IOS_CLIENT_ID (and optionally GOOGLE_WEB_CLIENT_ID).");
-//        }
-//
-//        try {
-//            GoogleIdTokenVerifier verifier = new GoogleIdTokenVerifier.Builder(
-//                    new NetHttpTransport(), GsonFactory.getDefaultInstance()
-//            )
-//                    .setAudience(audience)
-//                    .setIssuer("https://accounts.google.com")
-//                    .build();
-//
-//            GoogleIdToken googleIdToken = verifier.verify(idToken);
-//
-//            if (googleIdToken == null) {
-//                log.warn("ActionLog.loginWithGoogle.failed reason=google_verify_null tokenPrefix={}", tokenPrefix);
-//                throw new UserNotAuthorizedException(
-//                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
-//                        "Invalid Google ID token"
-//                );
-//            }
-//
-//            GoogleIdToken.Payload payload = googleIdToken.getPayload();
-//            String email = payload.getEmail();
-//            Boolean emailVerified = payload.getEmailVerified();
-//            String name = (String) payload.get("name");
-//            String sub = payload.getSubject();
-//            String aud = (String) payload.getAudience();
-//
-//            log.info("ActionLog.loginWithGoogle.googleVerified email={}, emailVerified={}, sub={}, aud={}",
-//                    email, emailVerified, sub, aud);
-//
-//            if (!StringUtils.hasText(email) || !Boolean.TRUE.equals(emailVerified)) {
-//                log.warn("ActionLog.loginWithGoogle.failed reason=email_not_verified email={}, emailVerified={}",
-//                        email, emailVerified);
-//                throw new UserNotAuthorizedException(
-//                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
-//                        "Google account email is not verified"
-//                );
-//            }
-//
-//            UserEntity userEntity = userRepository.findByEmail(email).orElse(null);
-//
-//            if (userEntity == null) {
-//                log.info("ActionLog.loginWithGoogle.userCreate.start email={}", email);
-//
-//                userEntity = new UserEntity();
-//                userEntity.setEmail(email);
-//                userEntity.setFullName(name);
-//                // TODO: role provider set, etc.
-//
-//                userRepository.save(userEntity);
-//
-//                log.info("ActionLog.loginWithGoogle.userCreate.end userId={}, email={}",
-//                        userEntity.getId(), email);
-//            } else {
-//                log.info("ActionLog.loginWithGoogle.userFound userId={}, email={}",
-//                        userEntity.getId(), email);
-//            }
-//
-//            SecurityContextHolder.getContext().setAuthentication(
-//                    new UsernamePasswordAuthenticationToken(
-//                            userEntity, null, userEntity.getAuthorities()
-//                    )
-//            );
-//
-//            AuthenticationDto auth = AuthenticationDto.builder()
-//                    .token( jwtService.generateToken(userEntity)).build();
-//
-//            log.info("ActionLog.loginWithGoogle.end userId={}, email={}", userEntity.getId(), email);
-//            return auth;
-//
-//        } catch (UserNotAuthorizedException e) {
-//            log.warn("ActionLog.loginWithGoogle.failed message={}", e.getMessage());
-//            throw e;
-//        } catch (Exception e) {
-//            log.error("ActionLog.loginWithGoogle.failed error={}", e.getMessage(), e);
-//            throw new UserNotAuthorizedException(
-//                    ExceptionEnum.USER_NOT_AUTHORIZED.name(),
-//                    "Error verifying Google ID token"
-//            );
-//        }
-//    }
-    public AuthenticationDto refreshToken(String oldAccessToken) {
-        log.info("Refresh Token Started...");
+        if (!StringUtils.hasText(refreshToken)) {
+            throw new UserNotAuthorizedException(
+                    ExceptionEnum.USER_NOT_AUTHORIZED.name(),
+                    "Refresh token is missing"
+            );
+        }
 
-        UserDetails userDetails = getAccount();
-        jwtBlacklistService.addBlacklist(oldAccessToken, 5L);
-        return generateToken(userDetails);
+        if (jwtBlacklistService.isBlacklisted(refreshToken)) {
+            throw new UserNotAuthorizedException(
+                    ExceptionEnum.USER_NOT_AUTHORIZED.name(),
+                    "Refresh token is blacklisted"
+            );
+        }
+
+        try {
+            if (!jwtService.isRefreshToken(refreshToken)) {
+                throw new UserNotAuthorizedException(
+                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
+                        "Invalid refresh token"
+                );
+            }
+
+            String username = jwtService.extractUsername(refreshToken);
+            UserEntity user = userRepository.findByUsername(username).orElseThrow(() ->
+                    new UserNotAuthorizedException(
+                            ExceptionEnum.USER_NOT_AUTHORIZED.name(),
+                            "User not found for refresh token"
+                    ));
+
+            if (!user.isEnabled()) {
+                throw new UserNotAuthorizedException(
+                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
+                        "Account is deactivated"
+                );
+            }
+
+            if (!jwtService.isTokenVersionValid(refreshToken, user)) {
+                throw new UserNotAuthorizedException(
+                        ExceptionEnum.USER_NOT_AUTHORIZED.name(),
+                        "Refresh token version mismatch"
+                );
+            }
+
+            jwtBlacklistService.addBlacklist(refreshToken, jwtService.getRemainingTtlMinutes(refreshToken));
+            log.info("ActionLog.refreshToken.end");
+            return issueTokens(user, response);
+        } catch (ExpiredJwtException e) {
+            clearRefreshCookie(response);
+            throw new JwtExpiredException(
+                    ExceptionEnum.JWT_TOKEN_EXPIRED.name(),
+                    String.format(ExceptionEnum.JWT_TOKEN_EXPIRED.getLog(), "refresh")
+            );
+        } catch (JwtException e) {
+            throw new UserNotAuthorizedException(
+                    ExceptionEnum.USER_NOT_AUTHORIZED.name(),
+                    "Invalid refresh token"
+            );
+        }
     }
 
-    public void logout(String accessToken) {
-        log.info("Log Out Started...");
-
-        jwtBlacklistService.addBlacklist(accessToken, 19L);
-
-        log.info("Log Out Ended");
-    }
-
-
-    public static UserDetails getAccount() {
-        log.info("Get Account Started...");
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        assert authentication != null;
-        return (UserEntity) authentication.getPrincipal();
-    }
-
-    private boolean emailExists(String email) {
-        return userRepository.findByEmail(email).orElse(null) != null;
+    public void logout(String accessToken, String refreshToken, HttpServletResponse response) {
+        log.info("ActionLog.logout.start");
+        blacklistIfPresent(accessToken);
+        blacklistIfPresent(refreshToken);
+        clearRefreshCookie(response);
+        log.info("ActionLog.logout.end");
     }
 
     private boolean checkOTP(String cachedOTP, String OTP) {
@@ -453,21 +245,46 @@ public class AuthService {
         return TTL == null || TTL < 0;
     }
 
-    private void setRolesAndSave(UserEntity userEntity) {
-        RoleEntity role = roleRepository.findByName("USER")
-                .orElseThrow(() -> new NotFoundException(
-                        ExceptionEnum.ROLE_NOT_FOUND.name(),
-                        String.format(ExceptionEnum.ROLE_NOT_FOUND.getLog(), "USER")
-                ));
-        userEntity.setRole(role);
-        userRepository.save(userEntity);
+    private AuthenticationDto issueTokens(UserEntity user, HttpServletResponse response) {
+        String accessToken = jwtService.generateToken(user);
+        String refreshToken = jwtService.generateRefreshToken(user);
+        setRefreshCookie(response, refreshToken);
+        return AuthenticationDto.builder()
+                .token(accessToken)
+                .build();
     }
 
-    private AuthenticationDto generateToken(UserDetails user) {
-        String token = jwtService.generateToken(user);
-        return AuthenticationDto.builder()
-                .token(token)
+    private void setRefreshCookie(HttpServletResponse response, String refreshToken) {
+        ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, refreshToken)
+                .httpOnly(true)
+                .secure(false)
+                .sameSite("Lax")
+                .path(REFRESH_COOKIE_PATH)
+                .maxAge(Duration.ofMillis(jwtService.getRefreshExpirationMs()))
                 .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private void clearRefreshCookie(HttpServletResponse response) {
+        ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, "")
+                .httpOnly(true)
+                .secure(false)
+                .sameSite("Lax")
+                .path(REFRESH_COOKIE_PATH)
+                .maxAge(0)
+                .build();
+        response.addHeader(HttpHeaders.SET_COOKIE, cookie.toString());
+    }
+
+    private void blacklistIfPresent(String token) {
+        if (!StringUtils.hasText(token)) {
+            return;
+        }
+        try {
+            jwtBlacklistService.addBlacklist(token, jwtService.getRemainingTtlMinutes(token));
+        } catch (Exception e) {
+            log.warn("ActionLog.blacklistIfPresent.skipped error={}", e.getMessage());
+        }
     }
 
     private UserEntity getUserByEmailOrThrow(String email) {
@@ -525,7 +342,7 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthenticationDto resetPassword(ResetPasswordRequestDto requestDto) {
+    public AuthenticationDto resetPassword(ResetPasswordRequestDto requestDto, HttpServletResponse response) {
 
         String token = requestDto.getToken();
         String newPassword = requestDto.getNewPassword();
@@ -565,7 +382,7 @@ public class AuthService {
         });
         log.info("ActionLog.resetPassword.success");
 
-        return generateToken(user);
+        return issueTokens(user, response);
     }
 
     private void validatePasswordStrength(String password) {

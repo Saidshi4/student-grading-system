@@ -1,38 +1,25 @@
 package com.supremecourt.studentgradingsystem.dao.entity;
 
-import com.fasterxml.jackson.annotation.JsonBackReference;
+import jakarta.persistence.DiscriminatorValue;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
-import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.MapsId;
 import jakarta.persistence.OneToMany;
-import jakarta.persistence.OneToOne;
+import jakarta.persistence.PrimaryKeyJoinColumn;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.List;
 
-@AllArgsConstructor
 @NoArgsConstructor
 @Getter
 @Setter
 @Entity
 @Table(name = "teachers")
-public class TeacherEntity {
-    @Id
-    private Long id;
+@DiscriminatorValue("TEACHER")
+@PrimaryKeyJoinColumn(name = "id")
+public class TeacherEntity extends UserEntity {
 
-    @MapsId
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "id")
-    @JsonBackReference
-    private UserEntity user;
-
-    private String employeeNo;
     private String department;
 
     @OneToMany(mappedBy = "teacher")

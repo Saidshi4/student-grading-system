@@ -29,7 +29,7 @@ public class RoleClaimController {
         return roleClaimService.getMatrix();
     }
     @PutMapping()
-    @RequiresPermission("update")
+    @RequiresPermission("role_claim_update")
     public ResponseEntity<?> updateRole(HttpServletRequest request, @RequestBody List<RoleClaimRequest> roleClaimRequests){
         Long userId = jwtService.extractUserIdFromAccessToken(request);
         roleClaimService.processRoleClaim(roleClaimRequests, userId);

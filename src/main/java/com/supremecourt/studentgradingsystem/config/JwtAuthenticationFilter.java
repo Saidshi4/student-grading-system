@@ -69,6 +69,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     return;
                 }
 
+                if (!jwtService.isAccessToken(jwt)) {
+                    unauthorized(response, "Invalid token");
+                    return;
+                }
+
+                if (!jwtService.isTokenVersionValid(jwt, userDetails)) {
+                    unauthorized(response, "Token is no longer valid");
+                    return;
+                }
+
                 if (!jwtService.isTokenValid(jwt, userDetails)) {
                     unauthorized(response, "Invalid token");
                     return;

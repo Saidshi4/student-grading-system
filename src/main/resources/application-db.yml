@@ -25,3 +25,9 @@ spring:
           use_query_cache: false
         boot:
           allow_jdbc_metadata_access: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 0
+    locations: classpath:db/migration
